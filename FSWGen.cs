@@ -42,23 +42,26 @@ public class FSWGen : IDisposable {
         }        
     }
 
+
+    enum WhenAnyResult {
+        Completion,
+        Read
+    }
     public async IAsyncEnumerable<System.IO.FileSystemEventArgs> Watch ([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         try {
             _fsw.EnableRaisingEvents = true;
-            var completion = _channel.Reader.Completion.ContinueWith((t) => 0);
+            var completion = _channel.Reader.Completion.ContinueWith((t) => WhenAnyResult.Completion);
             while (true) {
                 var readOne = _channel.Reader.ReadAsync(cancellationToken).AsTask();
-                Task<int> t = await Task.WhenAny(completion, readOne.ContinueWith((t) => 1)).ConfigureAwait(false);
+                Task<WhenAnyResult> t = await Task.WhenAny(completion, readOne.ContinueWith((t) => WhenAnyResult.Read)).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 switch (t.Result) {
-                    case 0:
+                    case WhenAnyResult.Completion:
                         yield break;
-                    case 1:
+                    case WhenAnyResult.Read:
                         yield return readOne.Result;
                         break;
-                    default:
-                        throw new InvalidOperationException ("unexpected result from WhenAny");
                 }
             }
         } finally {
